@@ -11,7 +11,7 @@ SHOW_BLOCK_ACTION = ('IDADeflat:show', 'Show State Info', 'show_state')
 REMOVE_BLOCK_ACTION = ('IDADeflat:del_block', 'Delete Relevant Block', 'del_working_blocks')
 IMPORT_BLOCK_ACTION = ('IDADeflat:import_block', 'Import Blocks From File', 'import_blocks')
 UNDO_PATCH_ACTION = ('IDADeflat:undo_patch', 'Undo Last Patching', 'undo_patch')
-BASIC_ACTIONS = [SET_ENTRY_ACTION, ADD_BLOCK_ACTION, REMOVE_BLOCK_ACTION, DO_DEFLAT_ACTION, RESET_ACTION, SHOW_BLOCK_ACTION, IMPORT_BLOCK_ACTION]
+BASIC_ACTIONS = [SET_ENTRY_ACTION, ADD_BLOCK_ACTION, REMOVE_BLOCK_ACTION, DO_DEFLAT_ACTION, RESET_ACTION, UNDO_PATCH_ACTION, SHOW_BLOCK_ACTION, IMPORT_BLOCK_ACTION]
 SWITCH_ACTIONS = []
 
 
@@ -65,7 +65,7 @@ class UIHooks(idaapi.UI_Hooks):
             idx = 0
             for action in BASIC_ACTIONS:
                 idaapi.attach_action_to_popup(widget, popup, action[0], "Deflat/")
-                if idx == 2 or idx == 5:
+                if idx == 2 or idx == 6:
                     idaapi.attach_action_to_popup(widget, popup, "-", 'Deflat/')
                 idx += 1
             for action in SWITCH_ACTIONS:
@@ -195,8 +195,11 @@ class IDADeflatMain:
                 return
         patches = main_obj.using_core.process(main_obj.working_entry, main_obj.working_blocks.copy())
         main_obj.reset_state(host=main_obj)
+        graph = idaapi.FlowChart(target_func, flags=idaapi.FC_PREDS)
+        for node in graph:
+            main_obj.last_patch.append((node.start_ea, idaapi.get_bytes(node.start_ea, node.end_ea - node.start_ea)))
+            idaapi.patch_bytes(node.start_ea, (node.end_ea - node.start_ea) * b'\x00')
         for patch_addr, patch_data in patches:
-            main_obj.last_patch.append((patch_addr, idaapi.get_bytes(patch_addr, len(patch_data))))
             idaapi.patch_bytes(patch_addr, patch_data)
             
     @staticmethod

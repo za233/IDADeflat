@@ -26,8 +26,15 @@ class RelocBlock:
         self.disasm()
         new_code = b''
         ptr = new_addr
+        offset = 0
         for insn in self.insns:
-            encoding, _ = self.ks.asm(insn.mnemonic + " " + insn.op_str, ptr)
+            try:
+                encoding, _ = self.ks.asm(insn.mnemonic + " " + insn.op_str, ptr)
+            except:
+                print('[AngrCore] invalid instruction(%s) detected, unable to relocation...' % (insn.mnemonic + " " + insn.op_str))
+                encoding = self.asm_data[offset:offset+insn.size]
+
+            offset += len(encoding)
             ptr += len(encoding)
             new_code += bytes(encoding)
         self.addr = new_addr
@@ -130,7 +137,7 @@ class AngrDeflatCore(DeflatCore):
             expressions = list(
                 state.scratch.irsb.statements[state.inspect.statement].expressions)
             if len(expressions) != 0 and isinstance(expressions[0], pyvex.expr.ITE):
-                print('[IDADeflat] apply value to address: ' + hex(state.scratch.ins_addr))
+                print('[AngrCore] apply value to address: ' + hex(state.scratch.ins_addr))
                 apply_place = state.solver.eval(state.scratch.ins_addr)
                 state.scratch.temps[expressions[0].cond.tmp] = apply_value
                 # If the first ITE statement of the basic block is not related to the switchvar, will there be a problem?
@@ -158,14 +165,14 @@ class AngrDeflatCore(DeflatCore):
 
         def retn_procedure(state):
             ip = state.solver.eval(state.regs.ip)
-            print('[IDADeflat] call from ' + hex(ip))
+            print('[AngrCore] call from ' + hex(ip))
             return
         for b in process_bb:
             node = self.get_block_node(b)
             block = proj.factory.block(b, size=node.end_ea - node.start_ea)
             for ins in block.capstone.insns:
                 if is_call(proj.arch.name, ins.mnemonic):
-                    print('[IDADeflat] ignored call instruction at ' + hex(ins.address))
+                    print('[AngrCore] ignored call instruction at ' + hex(ins.address))
                     proj.hook(ins.address, retn_procedure, length=ins.size)
         
         cond_map = {}
@@ -244,6 +251,9 @@ class AngrDeflatCore(DeflatCore):
         patches = []
         print(allocate_map)
         for b in process_bb:
+            if b not in allocate_map.keys():
+                print('[AngrCore] isolate block detected, the result maybe wrong...')
+                continue
             raw_data = block_map[b].asm_data
             if len(graph[b]) == 1:
                 succ = graph[b][0][0]
@@ -264,6 +274,7 @@ class AngrDeflatCore(DeflatCore):
                 print(insn)
             print()
             patches.append((allocate_map[b] ,raw_data))
+        self.graph = graph
         return patches
             
 
