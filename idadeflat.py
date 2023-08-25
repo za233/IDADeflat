@@ -10,6 +10,7 @@ RESET_ACTION = ('IDADeflat:reset', 'Reset Plugin State', 'reset_state')
 SHOW_BLOCK_ACTION = ('IDADeflat:show', 'Show State Info', 'show_state')
 REMOVE_BLOCK_ACTION = ('IDADeflat:del_block', 'Delete Relevant Block', 'del_working_blocks')
 IMPORT_BLOCK_ACTION = ('IDADeflat:import_block', 'Import Blocks From File', 'import_blocks')
+UNDO_PATCH_ACTION = ('IDADeflat:undo_patch', 'Undo Last Patching', 'undo_patch')
 BASIC_ACTIONS = [SET_ENTRY_ACTION, ADD_BLOCK_ACTION, REMOVE_BLOCK_ACTION, DO_DEFLAT_ACTION, RESET_ACTION, SHOW_BLOCK_ACTION, IMPORT_BLOCK_ACTION]
 SWITCH_ACTIONS = []
 
@@ -105,6 +106,7 @@ class IDADeflatMain:
         self.using_core :DeflatCore = None
         self.registered_actions = []
         self.ui_hook = None
+        self.last_patch = []
 
     def add_core(self, core : DeflatCore):
         self.process_cores.append(core)
@@ -191,7 +193,18 @@ class IDADeflatMain:
             if idaapi.get_func(block) != target_func:
                 print('[IDADeflat] blocks are not in the same function!...')
                 return
-        main_obj.using_core.process(main_obj.working_entry, main_obj.working_blocks.copy())
+        patches = main_obj.using_core.process(main_obj.working_entry, main_obj.working_blocks.copy())
+        main_obj.reset_state(host=main_obj)
+        for patch_addr, patch_data in patches:
+            main_obj.last_patch.append((patch_addr, idaapi.get_bytes(patch_addr, len(patch_data))))
+            idaapi.patch_bytes(patch_addr, patch_data)
+            
+    @staticmethod
+    def undo_patch(**kwargs):
+        main_obj : IDADeflatMain = kwargs['host']
+        for patch_addr, patch_data in main_obj.last_patch:
+            idaapi.patch_bytes(patch_addr, patch_data)
+        main_obj.last_patch.clear()
 
     @staticmethod
     def switch_core(**kwargs):
@@ -212,6 +225,7 @@ class IDADeflatMain:
             set_color_to_block(get_block_node(ea), 0xffffff)
         main_obj.working_entry = -1
         main_obj.working_blocks.clear()
+        main_obj.last_patch.clear()
         print('[IDADeflat] reset state successfully..')
         
 
